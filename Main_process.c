@@ -27,7 +27,9 @@
     volatile short * Video_Mem_ptr  = (short *) FPGA_ONCHIP_BASE;
     volatile short * TXT    = (short *) TEXT;
     volatile int * SW_ptr               = (int *) SW_BASE;
-	char* one_bit_pict = 
+	
+	
+	char one_bit_pict[ROW*COL] ; 	//every pixel is stored as a char, should be 1 or 0, in a quashed 1D array
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
@@ -40,6 +42,7 @@ int invert(){
 	*/
     int x,y;
 	short arr[ROW][COL];
+	int count = 0
 	*(Video_In_DMA_ptr + 3) = 0x0;          // Disable the video to capture one frame
     for (y = 0; y < 240; y++) {
         for (x = 0; x < 320; x++) {
@@ -47,6 +50,7 @@ int invert(){
 			arr[y][x] = temp2;
             if(temp2 > 8210){
                 temp2 = 0;
+				char
             }
             else if(temp2 < 8210){
                 temp2 = 0xFFFF;
