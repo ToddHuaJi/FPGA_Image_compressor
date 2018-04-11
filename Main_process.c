@@ -104,9 +104,24 @@ int compress(){
 	*TODO: package the picture into stream of 8-bit segment and send them one to the compressor
 	*all compressing handling are done in here 
 	*/
-	
+	char x = one_bit_pict[0];
+	for(int i = 1; i < 8; i++){
+		x = x + one_bit_pict[i+counter_for_byte*8];
+		x = (x << 1);
+	}
+	if(FIFO_IN_FULL_PIO == 0){
+			alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 1);
+			alt_write_byte(ODATA_PIO, x);
+	}
+	while(FIFO_IN_FULL_PIO == 1){
+		if(FIFO_IN_FULL_PIO == 0){
+			alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 1);
+			alt_write_byte(ODATA_PIO, x);
+	}
+	counter_for_byte ++;
 	return 0;
 }
+
 
 int process(void){
 	/*
