@@ -50,10 +50,13 @@ int invert(){
 			arr[y][x] = temp2;
             if(temp2 > 8210){
                 temp2 = 0;
-				char
+				one_bit_pict[count] = 0;
+				count++;
             }
             else if(temp2 < 8210){
                 temp2 = 0xFFFF;
+				one_bit_pict[count] = 1;
+				count++;
             }
             *(Video_Mem_ptr + (y << 9) + x) = temp2;
         }	
