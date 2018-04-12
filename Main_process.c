@@ -30,11 +30,10 @@
     
     int finish = 0;    // global flag for finish
     char one_bit_pict[ROW*COL] ;    //every pixel is stored as a char, should be 1 or 0, in a quashed 1D array
-    //compressed data
-int combuff[ROW*COL];
-    // Number of compressed 
-    N =0;
-    int counter_for_byte =0; // byte counter in compress
+
+    int combuff[ROW*COL];           //compressed data
+    int counter_for_byte =0;
+    N =0;            // Number of compressed 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
@@ -75,76 +74,91 @@ int preProcess(){
     return 0;
 }
 
-
-
-
 int compress(){
-	/*
-	*TODO: package the picture into stream of 8-bit segment and send them one to the compressor
-	*all compressing handling are done in here 
-	*/
-	char x = one_bit_pict[0];
-	for(int i = 1; i < 8; i++){
-		x = x + one_bit_pict[i+counter_for_byte*8];
-		x = (x << 1);
-	}
-	if(FIFO_IN_FULL_PIO == 0){
-			alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 1);
-			alt_write_byte(ODATA_PIO, x);
-	}
-	while(FIFO_IN_FULL_PIO == 1){
-		if(FIFO_IN_FULL_PIO == 0){
-			alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 1);
-			alt_write_byte(ODATA_PIO, x);
-	}
-	counter_for_byte ++;
-	return 0;
+    /*
+    *TODO: package the picture into stream of 8-bit segment and send them one to the compressor
+    *all compressing handling are done in here 
+    */
+    if( ROW*COL/ 8 <=counter_for_byte){        // if compres finished then just return
+        return 0;
+    }
+    else{                                      // if not finished then kepp going 
+        char x = one_bit_pict[0];
+        int i;
+        for(i = 1; i < 8; i++){
+            x = x + one_bit_pict[i+counter_for_byte*8];
+            x = (x << 1);
+        }
+        while(FIFO_IN_FULL_PIO == 1);         //stall till the buffer is empty
+        if(FIFO_IN_FULL_PIO == 0){
+                alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 1);
+                alt_write_byte(ODATA_PIO, x);
+                alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 1);
+        }
+        else{
+            print("FIFO_IN_FULL_PIO error, counter_for_byte is： %s", counter_for_byte);       // error in FIFO to RLE buffer
+        }
+            counter_for_byte ++;
+        return 0;
+    }
 }
 
-int decompress(){
+int takeCompress(){
+    //take compressed data from FIFO and store into combuff, store into the combuff 
+    //will be called repeatlly, if no data to be read, then just exist 
 
-//take 24 bit number to binary
     Rready = alt_read_byte(ALT_FPGA_BRIDGE_LWH2F_OFST+RESULT_READY_PIO_BASE);
     if (Rready){
     alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_OUT_READ_REQ_PIO_BASE, 1);
     output =alt_read_hword(ALT_FPGA_BRIDGE_LWH2F_OFST+IDATA_PIO_SPAN);
-    decode(out
+    
     combuff[N] = output;
+    N++;
     }
     return 0;
 }
 int decode(){
-    int i =0;
-    int j =0;
+    int i,j;
     int data =0;
     int type =0;
-    int current =0;
+    int current =0;    // the index of pixel
      for(i=0; i<N+1; i++){
-      data = combuff[0];
-       type = data>>23;
-       count  = data- ((data>>23)<<23)
+       data = combuff[i];
+       type = ((data>>23) & 1);   //take the 24th bit as value bit
+       count  = data-(type<<23);
        
        for (j= 0; j<count; j++){
            if(type = 0){
-          *(Video_Mem_ptr +current  = 0x0000
+           *(Video_Mem_ptr + current) =0x0000;
            }
            if(type =1){
-           *(Video_Mem_ptr + current =0xFFFF
+           *(Video_Mem_ptr + current) =0xFFFF;
            }
        current ++;
-     
      }
     
 }
-int combuff[ROW*COL];
     return 0;
+}
+
+int finish(){
+    /*
+    *checking whether we have the whole compressed data, if not 
+    */
+
+
+
+    return 1;
 }
 int process(void){
     /*
     * This is the moddified old image(), same idea, press once to capture, and no switch needed
     * press again to quit 
     */
-    
+    for(int i =0; i < ROW*COL; i++){            // intiating array 
+        one_bit_pict[i] = (char)0;
+        combuff[i] = 0;
+    }
     *(Video_In_DMA_ptr + 3) = 0x4;              // Enable the video every time 
     while(*KEY_ptr != 0 );                      // catch long KEY holding, wait for release
 
@@ -163,11 +177,12 @@ int process(void){
                 while(!finish){ // doing stuff
                 
                     compress();
-                   
+                    takeCompress();
                     
                 }
+                
                 while(*KEY_ptr != 0 );
-                decode
+                
                 while(*KEY_ptr == 0 );          //wait for KEY press to end this cycle 
                 return 0;
             
