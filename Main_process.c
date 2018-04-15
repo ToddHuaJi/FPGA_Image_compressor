@@ -2,10 +2,10 @@
 #include "stdio.h"
 #include "time.h"
 #include "string.h"
-#include "address_map_arm"
-#include "hps"
-#include "socal"
-#include "hps_soc_system"
+#include "address_map_arm.h"
+#include "hps.h"
+#include "socal.h"
+#include "hps_soc_system.h"
 
 #define KEY_BASE              0xFF200050
 #define VIDEO_IN_BASE         0xFF203060
@@ -79,6 +79,7 @@ int compress(){
     *TODO: package the picture into stream of 8-bit segment and send them one to the compressor
     *all compressing handling are done in here 
     */
+  	Rready = alt_read_byte(ALT_FPGA_BRIDGE_LWH2F_OFST+RESULT_READY_PIO_BASE);
     if( ROW*COL/ 8 <=counter_for_byte){        // if compres finished then just return
         return 0;
     }
@@ -89,11 +90,11 @@ int compress(){
             x = x + one_bit_pict[i+counter_for_byte*8];
             x = (x << 1);
         }
-        while(FIFO_IN_FULL_PIO == 1);         //stall till the buffer is empty
-        if(FIFO_IN_FULL_PIO == 0){
-                alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 1);
+        while(Ready == 1);         //stall till the buffer is empty
+        if(Ready == 0){
+                alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 1);        //enable RLE input 
                 alt_write_byte(ODATA_PIO, x);
-                alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 1);
+
         }
         else{
             print("FIFO_IN_FULL_PIO error, counter_for_byte is： %s", counter_for_byte);       // error in FIFO to RLE buffer
@@ -106,7 +107,11 @@ int compress(){
 int takeCompress(){
     //take compressed data from FIFO and store into combuff, store into the combuff 
     //will be called repeatlly, if no data to be read, then just exist 
-
+    
+    alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 0);        
+    
+    
+    
     Rready = alt_read_byte(ALT_FPGA_BRIDGE_LWH2F_OFST+RESULT_READY_PIO_BASE);
     if (Rready){
     alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_OUT_READ_REQ_PIO_BASE, 1);
@@ -141,15 +146,41 @@ int decode(){
     return 0;
 }
 
-int finish(){
-    /*
-    *checking whether we have the whole compressed data, if not 
-    */
-
-
-
-    return 1;
+int check(){
+    int i, data ,type;
+    int index = 0; 
+    for(i = 0; i<N+1; i++){
+        data = combuff[i];
+        type = ((data>>23) & 1); 
+        index = index + (data-(type << 23));  
+    }
+    if(index == ROW*COL){
+        return 1; // if the count is equal to row*col  
+    }
+    return 0;
 }
+
+
+int initialSys(){
+  	/*
+  	 * flush all RLE component and FIFO buffer 
+  	 */
+  
+    alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_OUT_READ_REQ_PIO_BASE, 0);
+  	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RESULT_READY_PIO, 0);
+  	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO, 1);
+  	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO, 0);
+	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_RESET_PIO, 1);
+  	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_RESET_PIO, 0);
+  	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_FULL_PIO, 0);
+ 	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_READ_REQ_PIO_BASE, 0);
+  
+    return 0;
+}
+
+
+
+
 int process(void){
     /*
     * This is the moddified old image(), same idea, press once to capture, and no switch needed
@@ -167,19 +198,27 @@ int process(void){
     {
         if (*KEY_ptr != 0)                      // check if any KEY was pressed
         {   
-            
+                
+                
+                initialSys();
                 invert();
                 preProcess();
                 /*
                 * processing code here, 
                 */
                 int n;
-                while(!finish){ // doing stuff
+                while(counter_for_byte*8 == ROW*COL){ // doing stuff
                 
                     compress();
                     takeCompress();
                     
                 }
+                while(!check()){                    //already run out of raw data, just catching compressed data
+                    takeCompress();
+                }
+                
+                
+  			            
                 
                 while(*KEY_ptr != 0 );
                 
