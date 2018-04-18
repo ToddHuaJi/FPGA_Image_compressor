@@ -56,22 +56,26 @@ int preProcess(){
             short temp2 = *(Video_Mem_ptr + (y << 9) + x);
             
             if(temp2 <= 8210){
-                temp2 = 0;
-                one_bit_pict[x+y*COL] = 0;
-
-            }
-            else if(temp2 > 8210){
-                temp2 = 0xFFFF;
+                temp2 = 0;                // black
                 one_bit_pict[x+y*COL] = 1;
 
             }
-			//printf("%d", one_bit_pict[x+y*COL]);
+            else if(temp2 > 8210){
+                temp2 = 0xFFFF;           // white
+                one_bit_pict[x+y*COL] = 0;
+
+            }
             *(Video_Mem_ptr + (y << 9) + x) = temp2;
+			
+			if(x+y*COL<320)
+				printf("%d ", one_bit_pict[x+y*COL]);
         }   
-		//printf("%d %d\n", y, x);
+		
     }
-	printf ("safdsafsfdgadgadg \n");
-    
+	one_bit_pict[0]=1;
+    one_bit_pict[1]=1;
+	one_bit_pict[2]=0;
+	one_bit_pict[3]=1;
     return 0;
 }
 
@@ -81,48 +85,54 @@ int compress(){
     *all compressing handling are done in here 
     */
 	//printf("compressing with seg: %d\n", counter_for_byte);
+	// OUT FIFO empty
+	
   	int Ready = alt_read_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_FULL_PIO_BASE);
 	
     if( ROW*COL/ 8 <= counter_for_byte){        // if compres finished then just set end of steam and return 
 		alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 1);
+		alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 0);
         return 1;
     }
+	
     else{                                      // if not finished then kepp going 
+		if(counter_for_byte ==0 ){
+			alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 1);
+			alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 0);
+		}
         int x = one_bit_pict[counter_for_byte*8];
         int i;
         for(i = 1; i < 8; i++){
 			x = (x << 1);
             x = x + one_bit_pict[i+counter_for_byte*8];
-            
+			printf("buff stuff: %d \n",one_bit_pict[i+counter_for_byte*8]);
         }
-		printf("FIFO full: %d with count: %d, input x: %x ", Ready, counter_for_byte,(unsigned char)x);
-        while(alt_read_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_FULL_PIO_BASE) == 1){			//stall till the buffer is empty
-			printf(" waiting for FIFO\n");
-		}         
-        
-        alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 1);        //enable RLE input 
-        alt_write_byte(ODATA_PIO_BASE, (char)0xff);
+		alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 1);        //enable RLE input 
+        alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + ODATA_PIO_BASE, (char)x);
+		//printf("buff stuff: %x \n",alt_read_word(ALT_FPGA_BRIDGE_LWH2F_OFST + ODATA_PIO_BASE) );
 		alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 0);
 		
+		//printf("FIFO full: %d with count: %d, input x: %x ", Ready, counter_for_byte,(unsigned char)x);
+        //while(Ready == 1){			//stall till the buffer is empty
+		//	printf(" waiting for FIFO\n");
+		//}         
+        
+       
+		/* DEBUG
 		alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 1); 
-		alt_write_byte(ODATA_PIO_BASE, (char)0xff);
+		alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + ODATA_PIO_BASE, (char)0xff);
 		alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 0);
 		
 		
 		alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 1);
-		
+		*/
 		//printf("after we sent a seg, FIFO: %d", alt_read_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_FULL_PIO_BASE));
 				//printf("input x: %d ", );
-
         
-        
-        
-        if(counter_for_byte ==0 ){
-			alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 1);
-			alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 0);
-		}
+		
+		
         counter_for_byte ++;
-		alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 0);        //disable RLE input
+		//alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RESULT_READY_PIO_BASE, 0);        //disable RLE input
         return 0;
     }
 	
@@ -134,41 +144,50 @@ int takeCompress(){
     
     //alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 0);        
     
-    int Ready, output;
+    int Ready, output,npix;
     
     Ready = alt_read_byte(ALT_FPGA_BRIDGE_LWH2F_OFST+ RESULT_READY_PIO_BASE);
-	printf("Compressed ready : %d \n", Ready);
-    if (Ready==1){
+	//printf("Compressed ready : %d \n", Ready);
+    if (Ready==0){
     alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_OUT_READ_REQ_PIO_BASE, 1);
     output =alt_read_word(ALT_FPGA_BRIDGE_LWH2F_OFST + IDATA_PIO_BASE);
 	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_OUT_READ_REQ_PIO_BASE, 0);
-    printf("output data: %d, N: %d\n", output ,N);
+    //printf("output data: %d, N: %d\n", output ,N);
     combuff[N] = output;
-    N++;
+	if(N<10){
+		//printf("%x, ", output);
+	}
+	 npix =  combuff[N]&0x7FFFFF;
+	 N++;
     }
-    return 0;
+    return npix;
 }
 int decode(){
     int i,j, count;
+	i = 0;
     int data =0;
     int type =0;
     int current =0;    // the index of pixel
-     for(i=0; i<N+1; i++){
+     while(current<9600){
        data = combuff[i];
-       type = ((data>>23) & 1);   //take the 24th bit as value bit
-       count  = data-(type<<23);
+      // type = ((data>>23) & 1);   //take the 24th bit as value bit
+       //count  = data-(type<<23);
+	   type = data& 0x800000;
+	   count = data &0x7FFFFF;
        
        for (j= 0; j<count; j++){
-           if(type = 0){
-           *(Video_Mem_ptr + current) =0x0000;
-           }
-           if(type =1){
+           if(type == 0){
            *(Video_Mem_ptr + current) =0xFFFF;
            }
+           if(type == 1){
+           *(Video_Mem_ptr + current) =0x0000;
+           }
        current ++;
-     }
+		}
+	 i++;
     
-}
+	}
+printf("decode done\n");
     return 0;
 }
 
@@ -194,7 +213,7 @@ int initialSys(){
   	 */
   
     alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_OUT_READ_REQ_PIO_BASE, 0);
-  	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RESULT_READY_PIO_BASE, 0);
+  	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RESULT_READY_PIO_BASE, 1);
   	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 1);
   	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 0);
 	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_RESET_BASE, 1);
@@ -246,15 +265,23 @@ int process(void){
                     
                 }
 				*/
-				
-				while(!compress() || !alt_read_byte(ALT_FPGA_BRIDGE_LWH2F_OFST+ RESULT_READY_PIO_BASE)){
-					takeCompress();
+				int p = 0;
+				while (p<=50){
+					compress();
+					while(!alt_read_byte(ALT_FPGA_BRIDGE_LWH2F_OFST+ RESULT_READY_PIO_BASE)){
+						p=p+takeCompress();
+					}
 				}
-				printf("end of compression");
-                while(!check()){                    //already run out of raw data, just catching compressed data
-                    takeCompress();
-                }
-				printf("finished compressing, %d, %d\n", counter_for_byte, N);
+				
+				//while(!compress() || !alt_read_byte(ALT_FPGA_BRIDGE_LWH2F_OFST+ RESULT_READY_PIO_BASE)){
+					//takeCompress();
+				//}
+				//printf("end of compression\n");
+              //  while(!check()){                    //already run out of raw data, just catching compressed data
+                 //   takeCompress();
+              //  }
+				
+				
                 printf("compress done\n");
                 
   			            
