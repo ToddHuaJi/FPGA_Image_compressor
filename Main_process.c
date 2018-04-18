@@ -67,12 +67,12 @@ int preProcess(){
             }
             *(Video_Mem_ptr + (y << 9) + x) = temp2;
 			
-			if(x+y*COL<320)
-				printf("%d ", one_bit_pict[x+y*COL]);
+			//if(x+y*COL<320)
+				//printf("%d ", one_bit_pict[x+y*COL]);
         }   
 		
     }
-	one_bit_pict[0]=1;
+	one_bit_pict[0]=0;
     one_bit_pict[1]=1;
 	one_bit_pict[2]=0;
 	one_bit_pict[3]=1;
@@ -97,15 +97,15 @@ int compress(){
 	
     else{                                      // if not finished then kepp going 
 		if(counter_for_byte ==0 ){
-			alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 1);
-			alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 0);
+			alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_RESET_BASE, 1);
+			alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_RESET_BASE, 0);
 		}
         int x = one_bit_pict[counter_for_byte*8];
         int i;
         for(i = 1; i < 8; i++){
-			x = (x << 1);
-            x = x + one_bit_pict[i+counter_for_byte*8];
-			printf("buff stuff: %d \n",one_bit_pict[i+counter_for_byte*8]);
+			//x = (x << 1);
+            x = x + (one_bit_pict[i+counter_for_byte*8] << i);
+			printf("buff stuff: %x, %d, %d \n",x, i, counter_for_byte);
         }
 		alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_WRITE_REQ_PIO_BASE, 1);        //enable RLE input 
         alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + ODATA_PIO_BASE, (char)x);
@@ -154,8 +154,8 @@ int takeCompress(){
 	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_OUT_READ_REQ_PIO_BASE, 0);
     //printf("output data: %d, N: %d\n", output ,N);
     combuff[N] = output;
-	if(N<10){
-		//printf("%x, ", output);
+	if(N<4){
+		printf("output: %x \n", output);
 	}
 	 npix =  combuff[N]&0x7FFFFF;
 	 N++;
@@ -174,7 +174,9 @@ int decode(){
        //count  = data-(type<<23);
 	   type = data& 0x800000;
 	   count = data &0x7FFFFF;
-       
+       if (current==0){
+		   count-=8;
+	   }   
        for (j= 0; j<count; j++){
            if(type == 0){
            *(Video_Mem_ptr + current) =0xFFFF;
@@ -266,11 +268,12 @@ int process(void){
                 }
 				*/
 				int p = 0;
-				while (p<=50){
+				N=0;
+				counter_for_byte=0;
+				while (p<=ROW*COL){
 					compress();
-					while(!alt_read_byte(ALT_FPGA_BRIDGE_LWH2F_OFST+ RESULT_READY_PIO_BASE)){
 						p=p+takeCompress();
-					}
+					
 				}
 				
 				//while(!compress() || !alt_read_byte(ALT_FPGA_BRIDGE_LWH2F_OFST+ RESULT_READY_PIO_BASE)){
@@ -307,7 +310,7 @@ int main(void){                                             //Da main code
     /*
     * HERE comes da main code 
     */
-    int y;
+    
    
     while(1){
         process();  
