@@ -265,7 +265,7 @@ int process(void){
                 while(*KEY_ptr != 0 );
                 
                 while(*KEY_ptr == 0 );          //wait for KEY press to end this cycle 
-				double compress_rate = ((double)N*24) / (ROW*COL);
+				double compress_rate = ((double)N*24) / (ROW*COL/8);
 				printf("compress ratio in bits: %f\n", compress_rate);
 				printf("compress ratio format: compress data count * 24/ number of pixels\n");
 				decode();
