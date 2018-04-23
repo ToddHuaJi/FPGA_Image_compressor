@@ -1,8 +1,4 @@
-// #include "address_map_arm.h"
-/*
-*Peng you Hei bai bu hui dong 
-*ni dong de 
-*/
+
 #include "stdio.h"
 #include "time.h"
 #include "string.h"
@@ -93,10 +89,11 @@ int compress(){
 	
     if( ROW*COL/ 8 <= counter_for_byte){        // if compres finished then just set end of steam and return 
 		alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 1);
-		alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 0);
+		//alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 0);
 		
         return 1;
     }
+	
 	while (alt_read_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_FULL_PIO_BASE)){
 		printf("FIF_IN_FULLLLL! %d\n",p );
 		alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 1);
@@ -157,14 +154,17 @@ int decode(){
 	int x = 0;
 	int y = 0; 
     int current =0;    // the index of pixel
+	int temp = 0;
      while(current<(ROW*COL)){
        data = combuff[i];
      
 	   type = data& 0x800000;
 	   count = data &0x7FFFFF;
-          if((current == 0)&&(!type)){
-			  count -=8;
+          if((temp == 0)){
+			  count =count - 8;
 			  t ++;
+			  temp=1;
+			  //printf("count: %d\n", count);
 			  //r ++;
 		  }
        for (j= 0; j<count; j++){
@@ -199,8 +199,8 @@ int initialSys(){
   
     alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_OUT_READ_REQ_PIO_BASE, 0);
   	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RESULT_READY_PIO_BASE, 1);
-  	//alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 1);
-  	//alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 0);
+  	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 1);
+  	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 0);
 	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_RESET_BASE, 1);
   	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_RESET_BASE, 0);
   	alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + FIFO_IN_FULL_PIO_BASE, 0);
@@ -238,7 +238,7 @@ int process(void){
                 preProcess();
 				printf("preProcess finished\n");
 
-    
+				alt_write_byte(ALT_FPGA_BRIDGE_LWH2F_OFST + RLE_FLUSH_PIO_BASE, 0);
 				int j = 0;
 				for(j=0;j<ROW*COL;j++){
 					combuff[j] = 0;
